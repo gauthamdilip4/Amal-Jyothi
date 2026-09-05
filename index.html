@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NeuroGesture Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between p-6">
+  <header class="text-center">
+    <h1 class="text-3xl font-bold tracking-wide">NeuroGesture</h1>
+    <p class="text-slate-400 text-sm">Low-Cost Assistive Communication</p>
+  </header>
+
+  <div class="relative w-80 h-80 my-auto flex items-center justify-center">
+    <div id="tile-water" class="absolute top-0 px-6 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 font-semibold transition-all">💧 Water</div>
+    <div id="tile-nurse" class="absolute left-0 px-6 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 font-semibold transition-all">🔔 Call Nurse</div>
+    <div id="tile-pain" class="absolute right-0 px-6 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 font-semibold transition-all">⚠️ Pain</div>
+    <div id="tile-bed" class="absolute bottom-0 px-6 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 font-semibold transition-all">🛏️ Adjust Bed</div>
+    
+    <div id="status-display" class="text-center text-sm font-medium text-amber-400">
+      Look around to navigate<br/><span class="text-xs text-slate-500">Blink long to select</span>
+    </div>
+  </div>
+
+  <div class="fixed bottom-4 right-4 w-32 h-24 bg-black rounded-lg overflow-hidden border border-slate-700">
+    <video id="webcam" class="hidden" playsinline></video>
+    <canvas id="output_canvas" class="w-full h-full transform -scale-x-100"></canvas>
+  </div>
+
+  <script>
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const statusDisplay = document.getElementById('status-display');
+
+    function speakText(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        const landmarks = results.multiFaceLandmarks[0];
+        const iris = landmarks[468];
+        if (iris) {
+          if (iris.x < 0.42) { highlightTile('tile-pain', 'Pain'); }
+          else if (iris.x > 0.58) { highlightTile('tile-nurse', 'Call Nurse'); }
+          else if (iris.y < 0.42) { highlightTile('tile-water', 'Water'); }
+          else if (iris.y > 0.58) { highlightTile('tile-bed', 'Adjust Bed'); }
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    let activeTile = null;
+    function highlightTile(id, text) {
+      if (activeTile !== id) {
+        document.querySelectorAll('[id^="tile-"]').forEach(el => el.classList.remove('border-emerald-500', 'bg-emerald-950'));
+        const tile = document.getElementById(id);
+        if (tile) {
+          tile.classList.add('border-emerald-500', 'bg-emerald-950');
+          statusDisplay.innerText = `Selected: ${text}`;
+          speakText(text);
+        }
+        activeTile = id;
+      }
+    }
+
+    const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
+    faceMesh.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => { await faceMesh.send({ image: videoElement }); },
+      width: 320, height: 240
+    });
+    camera.start();
+  </script>
+</body>
+</html>
