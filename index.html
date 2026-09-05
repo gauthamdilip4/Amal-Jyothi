@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NeuroGesture Prototype</title>
+  <title>NeuroGesture - Pupil Movement</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
@@ -11,9 +11,10 @@
 <body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between p-6">
   <header class="text-center">
     <h1 class="text-3xl font-bold tracking-wide">NeuroGesture</h1>
-    <p class="text-slate-400 text-sm">Low-Cost Assistive Communication</p>
+    <p class="text-slate-400 text-sm">Pupil Tracking Assistive Communication</p>
   </header>
 
+  <!-- Radial Menu UI -->
   <div class="relative w-80 h-80 my-auto flex items-center justify-center">
     <div id="tile-water" class="absolute top-0 px-6 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 font-semibold transition-all">💧 Water</div>
     <div id="tile-nurse" class="absolute left-0 px-6 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 font-semibold transition-all">🔔 Call Nurse</div>
@@ -21,10 +22,11 @@
     <div id="tile-bed" class="absolute bottom-0 px-6 py-3 rounded-xl bg-slate-800 border-2 border-slate-700 font-semibold transition-all">🛏️ Adjust Bed</div>
     
     <div id="status-display" class="text-center text-sm font-medium text-amber-400">
-      Look around to navigate<br/><span class="text-xs text-slate-500">Blink long to select</span>
+      Look around using your pupils<br/><span class="text-xs text-slate-500">Keep head steady</span>
     </div>
   </div>
 
+  <!-- Camera Stream Overlay -->
   <div class="fixed bottom-4 right-4 w-32 h-24 bg-black rounded-lg overflow-hidden border border-slate-700">
     <video id="webcam" class="hidden" playsinline></video>
     <canvas id="output_canvas" class="w-full h-full transform -scale-x-100"></canvas>
@@ -48,12 +50,31 @@
 
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         const landmarks = results.multiFaceLandmarks[0];
-        const iris = landmarks[468];
-        if (iris) {
-          if (iris.x < 0.42) { highlightTile('tile-pain', 'Pain'); }
-          else if (iris.x > 0.58) { highlightTile('tile-nurse', 'Call Nurse'); }
-          else if (iris.y < 0.42) { highlightTile('tile-water', 'Water'); }
-          else if (iris.y > 0.58) { highlightTile('tile-bed', 'Adjust Bed'); }
+
+        // Right Eye Core Boundaries
+        const rightIris = landmarks[468];      // Pupil / Iris Center
+        const eyeLeftCorner = landmarks[33];   // Outer corner of right eye
+        const eyeRightCorner = landmarks[133];  // Inner corner of right eye
+        const eyeTop = landmarks[159];          // Upper eyelid
+        const eyeBottom = landmarks[145];       // Lower eyelid
+
+        if (rightIris && eyeLeftCorner && eyeRightCorner && eyeTop && eyeBottom) {
+          // Normalize Pupil Horizontal Position inside the Eye Box (0.0 to 1.0)
+          const horizontalGaze = (rightIris.x - eyeLeftCorner.x) / (eyeRightCorner.x - eyeLeftCorner.x);
+          
+          // Normalize Pupil Vertical Position inside the Eye Box (0.0 to 1.0)
+          const verticalGaze = (rightIris.y - eyeTop.y) / (eyeBottom.y - eyeTop.y);
+
+          // Thresholds relative strictly to the pupil position inside the eye sockets
+          if (horizontalGaze < 0.38) {
+            highlightTile('tile-nurse', 'Call Nurse');
+          } else if (horizontalGaze > 0.62) {
+            highlightTile('tile-pain', 'Pain');
+          } else if (verticalGaze < 0.35) {
+            highlightTile('tile-water', 'Water');
+          } else if (verticalGaze > 0.65) {
+            highlightTile('tile-bed', 'Adjust Bed');
+          }
         }
       }
       canvasCtx.restore();
